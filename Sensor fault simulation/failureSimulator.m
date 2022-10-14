@@ -9,17 +9,19 @@ classdef failureSimulator
         failureType;
         offset;
         lambda;
-        sigma;
+        sigmaDeg;
+        sigmaIS;
         tError;
         gain;
         value;
-        likelihood;
+        likelihoodFS;
+        likelihoodIS;
         alsoNegSpikes;
         severity;
         randomSpikeAmpl;
         satMax;
         satMin;
-        saturateFlag;
+        settings;
 
         frozenValue;
     end
@@ -34,17 +36,26 @@ classdef failureSimulator
             obj.failureType = 'None';
             obj.offset = 0;
             obj.lambda = 0;
-            obj.sigma = 0;
+            obj.sigmaDeg = 0;
+            obj.sigmaIS = 0;
             obj.tError = 0;
             obj.gain = 1;
             obj.value = 0;
-            obj.likelihood = 0;
+            obj.likelihoodFS = 0;
+            obj.likelihoodIS = 0;
             obj.alsoNegSpikes = false;
             obj.severity = 0;
             obj.randomSpikeAmpl = false;
             obj.satMax = inf;
             obj.satMin = -inf;
-            obj.saturateFlag = false;
+            obj.settings.saturateFlag = false;
+            obj.settings.bias = false;
+            obj.settings.drift = false;
+            obj.settings.degradation = false;
+            obj.settings.freezing = false;
+            obj.settings.calerr = false;
+            obj.settings.fs = false;
+            obj.settings.is = false;
 
             obj.frozenValue = nan;
         end
@@ -60,48 +71,51 @@ classdef failureSimulator
         function [obj, sensorData] = applyFailure(obj, sensorData, timestamp)
             for i = 1:length(timestamp)
                 if timestamp(i) >= obj.tError
-                    switch obj.failureType
-                        case 'Bias'
-                            %Add fixed bias to all dimensions
-                            sensorData(i) = sensorData(i) + obj.offset;
-                        case 'Drift'
-                            sensorData(i) = sensorData(i) + obj.lambda * (timestamp(i) - obj.tError);
-                        case 'Degradation'
-                            sensorData(i) = sensorData(i) - obj.sigma + 2*obj.sigma*rand;
-                        case 'Freezing'
-                            if timestamp(i) == obj.tError
-                                obj.frozenValue = sensorData(i);
-                            end
-                            sensorData(i) = obj.frozenValue;
-                        case 'CalibrationError'
-                            sensorData(i) = sensorData(i)*obj.gain;
-                        case 'FixedSpiking'
-                            if rand > (1 - obj.likelihood)
-                                sensorData(i) = obj.value;
-                            end
-                        case 'IncrementalSpiking'
-                            if rand > (1 - obj.likelihood)
-                                if obj.randomSpikeAmpl == true
-                                    randVal = rand;
-                                else
-                                    randVal = 1;
-                                end
-                                if obj.alsoNegSpikes
-                                    sensorData(i) = sensorData(i) -obj.sigma + 2*obj.sigma*randVal;
-                                else
-                                    sensorData(i) = sensorData(i) +obj.sigma*randVal;
-                                end
-                            end
+                    if obj.settings.offset
+                        sensorData(i) = sensorData(i) + obj.offset;
                     end
-
+                    if obj.settings.drift
+                        sensorData(i) = sensorData(i) + obj.lambda * (timestamp(i) - obj.tError);
+                    end
+                    if obj.settings.degradation
+                        sensorData(i) = sensorData(i) - obj.sigmaDeg + 2*obj.sigmaDeg*rand;
+                    end
+                    if obj.settings.freezing
+                        if timestamp(i) == obj.tError
+                            obj.frozenValue = sensorData(i);
+                        end
+                        sensorData(i) = obj.frozenValue;
+                    end
+                    if obj.settings.calerr
+                        sensorData(i) = sensorData(i)*obj.gain;
+                    end
+                    if obj.settings.fs
+                        if rand > (1 - obj.likelihoodFS)
+                            sensorData(i) = obj.value;
+                        end
+                    end
+                    if obj.settings.is
+                        if rand > (1 - obj.likelihoodIS)
+                            if obj.randomSpikeAmpl == true
+                                randVal = rand;
+                            else
+                                randVal = 1;
+                            end
+                            if obj.alsoNegSpikes
+                                sensorData(i) = sensorData(i) -obj.sigmaIS + 2*obj.sigmaIS*randVal;
+                            else
+                                sensorData(i) = sensorData(i) +obj.sigmaIS*randVal;
+                            end
+                        end
+                    end
                 else
-                    if strcmp(obj.failureType, 'Freezing')
+                    if obj.settings.freezing
                         obj.frozenValue = sensorData(i);
                     end
                 end
             end
 
-            if obj.saturateFlag
+            if obj.settings.saturateFlag
                 sensorData = obj.saturate(sensorData);
             end
 
@@ -109,37 +123,37 @@ classdef failureSimulator
 
         function obj = setOffset(obj, offset)
             obj.offset = offset;
-            obj.failureType = 'Bias';
+            obj.settings.bias = true;
         end
 
         function obj = setDrift(obj, lambda)
             if (abs(lambda) < 1 || abs(lambda) > 1)
                 obj.lambda = lambda;
-                obj.failureType = 'Drift';
+                obj.settings.drift = true;
             else
                 error('The drift coefficient must be between -1 and 1');
             end
         end
 
         function obj = setDegradation(obj, sigma)
-            obj.sigma = sigma;
-            obj.failureType = 'Degradation';
+            obj.sigmaDeg = sigma;
+            obj.settings.degradation = true;
         end
 
         function obj = setFreezing (obj)
-            obj.failureType = 'Freezing';
+            obj.settings.freezing = true;
         end
 
         function obj = setCalibrationError(obj, gain)
             obj.gain = gain;
-            obj.failureType = 'CalibrationError';
+            obj.settings.calerr = true;
         end
 
         function obj = setFixedSpiking(obj, value, likelihood)
             if (likelihood > 0 && likelihood  < 1)
                 obj.value = value;
-                obj.likelihood = likelihood;
-                obj.failureType = 'FixedSpiking';
+                obj.likelihoodFS = likelihood;
+                obj.settings.fs = true;
             else
                 error('The likelihood must be between 0 and 1')
             end
@@ -149,11 +163,11 @@ classdef failureSimulator
             if islogical(random)
                 if islogical(alsoNegative)
                     if (likelihood > 0 && likelihood  < 1)
-                        obj.sigma = sigma;
-                        obj.likelihood = likelihood;
+                        obj.sigmaIS = sigma;
+                        obj.likelihoodIS = likelihood;
                         obj.severity = severity;
                         obj.alsoNegSpikes = alsoNegative;
-                        obj.failureType = 'IncrementalSpiking';
+                        obj.settings.is = true;
                         obj.randomSpikeAmpl = random;
                     else
                         error('The likelihood must be between 0 and 1')
@@ -169,7 +183,7 @@ classdef failureSimulator
         function obj = setSensorSaturation(obj, min, max)
             obj.satMax = max;
             obj.satMin = min;
-            obj.saturateFlag = True;
+            obj.settings.saturateFlag = True;
         end
 
     end
