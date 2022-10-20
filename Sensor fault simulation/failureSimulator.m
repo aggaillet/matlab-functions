@@ -29,7 +29,7 @@ classdef failureSimulator
     methods
 
         function obj = failureSimulator()
-            obj.reset();
+            obj = obj.reset();
         end
 
         function obj = reset(obj)
@@ -71,7 +71,7 @@ classdef failureSimulator
         function [obj, sensorData] = applyFailure(obj, sensorData, timestamp)
             for i = 1:length(timestamp)
                 if timestamp(i) >= obj.tError
-                    if obj.settings.offset
+                    if obj.settings.bias
                         sensorData(i) = sensorData(i) + obj.offset;
                     end
                     if obj.settings.drift
