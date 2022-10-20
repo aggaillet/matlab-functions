@@ -127,12 +127,8 @@ classdef failureSimulator
         end
 
         function obj = setDrift(obj, lambda)
-            if (abs(lambda) < 1 || abs(lambda) > 1)
-                obj.lambda = lambda;
-                obj.settings.drift = true;
-            else
-                error('The drift coefficient must be between -1 and 1');
-            end
+            obj.lambda = lambda;
+            obj.settings.drift = true;
         end
 
         function obj = setDegradation(obj, sigma)
